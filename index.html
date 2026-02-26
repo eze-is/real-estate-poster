@@ -353,11 +353,53 @@
     white-space: nowrap;
   }
 
+  /* 图片预览弹窗（移动端长按保存） */
+  .image-modal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.92);
+    z-index: 1000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .image-modal.show { display: flex; }
+
+  .image-modal img {
+    max-width: 100%;
+    max-height: 75vh;
+    border-radius: 8px;
+    box-shadow: 0 4px 30px rgba(0,0,0,0.5);
+  }
+
+  .image-modal .tip {
+    margin-top: 20px;
+    font-size: 16px;
+    color: rgba(255,255,255,0.7);
+    text-align: center;
+  }
+
+  .image-modal .close-btn {
+    margin-top: 20px;
+    padding: 12px 40px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 24px;
+    color: #fff;
+    font-size: 15px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
   /* 响应式 - 移动端 */
   @media (max-width: 800px) {
     .app {
-      flex-direction: column-reverse;
-      padding: 12px;
+      flex-direction: column;
+      padding: 16px;
       gap: 16px;
     }
 
@@ -365,61 +407,50 @@
       flex: none;
       width: 100%;
       position: static;
-      padding: 16px;
+      padding: 20px;
       border-radius: 10px;
     }
 
     .form-panel h1 {
       font-size: 18px;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
     }
 
-    .field { margin-bottom: 12px; }
+    .field { margin-bottom: 14px; }
+
+    .field label { font-size: 15px; }
 
     .field input,
     .field textarea {
-      padding: 12px;
+      padding: 12px 14px;
       font-size: 16px; /* 防止 iOS 自动缩放 */
+      border-radius: 10px;
     }
 
     .field-row {
       flex-direction: column;
-      gap: 12px;
+      gap: 14px;
     }
 
     .btn-download {
       padding: 16px;
       font-size: 17px;
       border-radius: 12px;
-      position: sticky;
-      bottom: 12px;
-      z-index: 10;
-      box-shadow: 0 -2px 20px rgba(0,0,0,0.3);
+      margin-top: 12px;
     }
 
-    .preview-panel {
-      position: sticky;
-      top: 0;
-      z-index: 5;
-      background: #1a1a2e;
-      padding-bottom: 8px;
-    }
+    .preview-panel { width: 100%; }
 
     .preview-label {
-      font-size: 12px;
+      font-size: 13px;
       margin-bottom: 8px;
     }
 
     .preview-wrapper {
       max-width: 100%;
       border-radius: 6px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
-  }
-
-  /* 小屏手机 */
-  @media (max-width: 400px) {
-    .app { padding: 8px; }
-    .form-panel { padding: 14px; }
   }
 </style>
 </head>
@@ -520,6 +551,13 @@
   </div>
 </div>
 
+<!-- 图片预览弹窗 -->
+<div class="image-modal" id="imageModal" onclick="closeModal(event)">
+  <img id="modalImage" src="">
+  <div class="tip" id="modalTip">长按图片保存到相册</div>
+  <button class="close-btn" onclick="closeModal()">关闭</button>
+</div>
+
 <script>
   // 初始化日期为今天
   const today = new Date();
@@ -598,36 +636,50 @@
     }
   }
 
-  // 下载图片
+  // 检测移动端
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // 生成图片
+  async function generateImage() {
+    const canvas = document.getElementById('canvas');
+    const origTransform = canvas.style.transform;
+    canvas.style.transform = 'none';
+
+    const rendered = await html2canvas(canvas, {
+      width: 1080,
+      height: 1080,
+      scale: 1,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: null,
+    });
+
+    canvas.style.transform = origTransform;
+    return rendered.toDataURL('image/png');
+  }
+
+  // 下载/保存图片
   async function downloadImage() {
     const btn = document.getElementById('btnDownload');
     btn.classList.add('loading');
     btn.textContent = '⏳ 生成中...';
 
     try {
-      const canvas = document.getElementById('canvas');
-      // 临时取消缩放以按原始尺寸渲染
-      const origTransform = canvas.style.transform;
-      canvas.style.transform = 'none';
+      const dataUrl = await generateImage();
 
-      const rendered = await html2canvas(canvas, {
-        width: 1080,
-        height: 1080,
-        scale: 1,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-      });
-
-      // 恢复缩放
-      canvas.style.transform = origTransform;
-
-      // 下载
-      const link = document.createElement('a');
-      const name = document.getElementById('customerName').value || '喜报';
-      link.download = `成交喜报-${name}.png`;
-      link.href = rendered.toDataURL('image/png');
-      link.click();
+      if (isMobile) {
+        // 移动端：弹窗显示图片，长按保存
+        const modal = document.getElementById('imageModal');
+        document.getElementById('modalImage').src = dataUrl;
+        modal.classList.add('show');
+      } else {
+        // 桌面端：直接下载
+        const link = document.createElement('a');
+        const name = document.getElementById('customerName').value || '喜报';
+        link.download = `成交喜报-${name}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
     } catch (err) {
       console.error('生成失败:', err);
       alert('图片生成失败，请检查底图是否已加载');
@@ -635,6 +687,12 @@
 
     btn.classList.remove('loading');
     btn.textContent = '📥 下载喜报图片';
+  }
+
+  // 关闭弹窗
+  function closeModal(e) {
+    if (e && e.target !== e.currentTarget && e.target.tagName !== 'BUTTON') return;
+    document.getElementById('imageModal').classList.remove('show');
   }
 </script>
 
