@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>房产成交喜报生成器</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Serif SC', serif;
+    background: #1a1a2e;
+    color: #fff;
+    min-height: 100vh;
+  }
+
+  .app {
+    display: flex;
+    gap: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+    align-items: flex-start;
+  }
+
+  /* 左侧表单 */
+  .form-panel {
+    flex: 0 0 320px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 24px;
+    position: sticky;
+    top: 24px;
+  }
+
+  .form-panel h1 {
+    font-size: 20px;
+    margin-bottom: 20px;
+    color: #FFD700;
+    text-align: center;
+  }
+
+  .field { margin-bottom: 16px; }
+
+  .field label {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 6px;
+    color: rgba(255,255,255,0.7);
+  }
+
+  .field label .required {
+    color: #ff6b6b;
+    margin-left: 2px;
+  }
+
+  .field input,
+  .field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field input:focus,
+  .field textarea:focus {
+    border-color: #FFD700;
+  }
+
+  .field textarea { resize: vertical; height: 60px; }
+
+  .field-row {
+    display: flex;
+    gap: 12px;
+  }
+
+  .field-row .field { flex: 1; }
+
+  .file-upload {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .file-upload input[type="file"] {
+    display: none;
+  }
+
+  .file-upload-btn {
+    padding: 8px 14px;
+    background: rgba(255,215,0,0.15);
+    border: 1px dashed rgba(255,215,0,0.4);
+    border-radius: 8px;
+    color: #FFD700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .file-upload-btn:hover {
+    background: rgba(255,215,0,0.25);
+  }
+
+  .file-upload .file-name {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 150px;
+  }
+
+  .btn-download {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #FFD700, #FFA500);
+    border: none;
+    border-radius: 10px;
+    color: #1a1a2e;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    margin-top: 8px;
+  }
+
+  .btn-download:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(255,215,0,0.3);
+  }
+
+  .btn-download:active {
+    transform: translateY(0);
+  }
+
+  .btn-download.loading {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  /* 右侧预览 */
+  .preview-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .preview-label {
+    font-size: 14px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 12px;
+  }
+
+  .preview-wrapper {
+    width: 100%;
+    max-width: 540px;
+    aspect-ratio: 1;
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+  }
+
+  /* 画布（实际 1080×1080，缩放显示） */
+  .canvas {
+    width: 1080px;
+    height: 1080px;
+    position: relative;
+    transform-origin: top left;
+    overflow: hidden;
+    font-family: 'Noto Serif SC', serif;
+  }
+
+  .canvas .bg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* 中央暗色渐晕层，提升文字可读性 */
+  .canvas .vignette {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(0,0,0,0.25) 0%, transparent 100%);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* 文字层 */
+  .canvas .text-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 2;
+  }
+
+  /* 装饰分隔线：左线 ─ 菱形 ─ 右线 */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 auto;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    width: 90px;
+    height: 1.5px;
+    background: linear-gradient(90deg, transparent, rgba(255,215,0,0.7), transparent);
+  }
+
+  .divider .diamond {
+    width: 10px;
+    height: 10px;
+    background: rgba(255,215,0,0.7);
+    transform: rotate(45deg);
+    flex-shrink: 0;
+  }
+
+  .title-main {
+    margin-top: 100px;
+    font-size: 76px;
+    font-weight: 900;
+    background: linear-gradient(180deg, #FFE566 0%, #FFD700 40%, #D4A800 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 0.35em;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 20px rgba(255,215,0,0.2));
+  }
+
+  .customer-name {
+    margin-top: 32px;
+    font-size: 104px;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(255,215,0,0.5), 0 3px 10px rgba(0,0,0,0.6);
+    letter-spacing: 0.2em;
+  }
+
+  .customer-name .star {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #FFE566, #D4A800);
+    transform: rotate(45deg);
+    margin: 0 24px;
+    vertical-align: middle;
+    box-shadow: 0 0 12px rgba(255,215,0,0.4);
+  }
+
+  .subtitle {
+    margin-top: 24px;
+    font-size: 52px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.25em;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+
+  .property-info {
+    margin-top: 16px;
+    font-size: 40px;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.1em;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  }
+
+  .divider-line {
+    margin-top: 24px;
+  }
+
+  .blessing {
+    margin-top: 24px;
+    font-size: 38px;
+    color: rgba(255,215,0,0.85);
+    letter-spacing: 0.15em;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+
+  .blessing .bracket {
+    font-size: 44px;
+    color: rgba(255,215,0,0.5);
+    vertical-align: -2px;
+  }
+
+  .date-text {
+    margin-top: 14px;
+    font-size: 32px;
+    color: rgba(255,255,255,0.65);
+    letter-spacing: 0.1em;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+
+  /* 品牌栏 */
+  .brand-bar {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(4px);
+    border-radius: 14px;
+    border: 1px solid rgba(255,215,0,0.25);
+    padding: 20px 36px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .brand-bar .logo-img {
+    width: 84px;
+    height: 84px;
+    border-radius: 10px;
+    object-fit: contain;
+  }
+
+  .brand-bar .brand-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .brand-bar .company-name {
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+  }
+
+  .brand-bar .phone {
+    font-size: 28px;
+    color: rgba(255,255,255,0.75);
+    white-space: nowrap;
+  }
+
+  /* 响应式 */
+  @media (max-width: 800px) {
+    .app {
+      flex-direction: column;
+      padding: 16px;
+      gap: 20px;
+    }
+    .form-panel {
+      flex: none;
+      width: 100%;
+      position: static;
+    }
+    .preview-wrapper {
+      max-width: 100%;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- 左侧表单 -->
+  <div class="form-panel">
+    <h1>🏠 成交喜报生成器</h1>
+
+    <div class="field">
+      <label>客户姓名 <span class="required">*</span></label>
+      <input type="text" id="customerName" placeholder="如：张先生" oninput="updatePreview()">
+    </div>
+
+    <div class="field">
+      <label>楼盘/小区名 <span class="required">*</span></label>
+      <input type="text" id="propertyName" placeholder="如：翡翠湖畔花园" oninput="updatePreview()">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>户型面积</label>
+        <input type="text" id="area" placeholder="如：128㎡" oninput="updatePreview()">
+      </div>
+      <div class="field">
+        <label>成交日期</label>
+        <input type="date" id="dealDate" oninput="updatePreview()">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>祝福语</label>
+      <textarea id="blessing" placeholder="乔迁之喜 万事胜意" oninput="updatePreview()"></textarea>
+    </div>
+
+    <div class="field">
+      <label>公司名称</label>
+      <input type="text" id="companyName" placeholder="德佑房产·悦华加盟店·恒利店" oninput="updatePreview()">
+    </div>
+
+    <div class="field">
+      <label>联系电话</label>
+      <input type="text" id="phone" placeholder="138xxxx8888" oninput="updatePreview()">
+    </div>
+
+    <div class="field">
+      <label>底图</label>
+      <div class="file-upload">
+        <label class="file-upload-btn" for="bgFile">选择底图</label>
+        <input type="file" id="bgFile" accept="image/*" onchange="handleBgUpload(this)">
+        <span class="file-name" id="bgFileName">使用默认 bg.png</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>公司 Logo</label>
+      <div class="file-upload">
+        <label class="file-upload-btn" for="logoFile">选择 Logo</label>
+        <input type="file" id="logoFile" accept="image/*" onchange="handleLogoUpload(this)">
+        <span class="file-name" id="logoFileName">使用默认 logo.png</span>
+      </div>
+    </div>
+
+    <button class="btn-download" id="btnDownload" onclick="downloadImage()">📥 下载喜报图片</button>
+  </div>
+
+  <!-- 右侧预览 -->
+  <div class="preview-panel">
+    <div class="preview-label">实时预览</div>
+    <div class="preview-wrapper">
+      <div class="canvas" id="canvas">
+        <img class="bg" id="bgImage" src="bg.png">
+        <div class="vignette"></div>
+        <div class="text-layer">
+          <div class="title-main" id="titleMain">恭 喜 成 交</div>
+          <div class="customer-name" id="customerDisplay">
+            <span class="star"></span>
+            <span id="nameText">张先生</span>
+            <span class="star"></span>
+          </div>
+          <div class="subtitle">喜 提 新 房</div>
+          <div class="property-info" id="propertyDisplay">翡翠湖畔花园</div>
+          <div class="divider-line"><div class="divider"><div class="diamond"></div></div></div>
+          <div class="blessing" id="blessingDisplay"><span class="bracket">「</span>乔迁之喜 万事胜意<span class="bracket">」</span></div>
+          <div class="date-text" id="dateDisplay">2026.02.26</div>
+          <div class="brand-bar" id="brandBar">
+            <img class="logo-img" id="logoImage" src="logo.png"
+                 onerror="this.style.display='none'">
+            <div class="brand-info">
+              <div class="company-name" id="companyDisplay">德佑房产·悦华加盟店·恒利店</div>
+              <div class="phone" id="phoneDisplay">138xxxx8888</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 初始化日期为今天
+  const today = new Date();
+  const dateStr = today.getFullYear() + '-' +
+    String(today.getMonth() + 1).padStart(2, '0') + '-' +
+    String(today.getDate()).padStart(2, '0');
+  document.getElementById('dealDate').value = dateStr;
+
+  // 缩放预览
+  function scaleCanvas() {
+    const wrapper = document.querySelector('.preview-wrapper');
+    const canvas = document.getElementById('canvas');
+    const scale = wrapper.clientWidth / 1080;
+    canvas.style.transform = `scale(${scale})`;
+    wrapper.style.height = wrapper.clientWidth + 'px';
+  }
+  scaleCanvas();
+  window.addEventListener('resize', scaleCanvas);
+
+  // 实时更新预览
+  function updatePreview() {
+    const name = document.getElementById('customerName').value || '张先生';
+    const property = document.getElementById('propertyName').value || '翡翠湖畔花园';
+    const area = document.getElementById('area').value;
+    const date = document.getElementById('dealDate').value;
+    const blessing = document.getElementById('blessing').value || '乔迁之喜 万事胜意';
+    const company = document.getElementById('companyName').value || '德佑房产·悦华加盟店·恒利店';
+    const phoneVal = document.getElementById('phone').value || '138xxxx8888';
+
+    document.getElementById('nameText').textContent = name;
+
+    // 楼盘 + 面积
+    let propText = property;
+    if (area) propText += ' · ' + area;
+    document.getElementById('propertyDisplay').textContent = propText;
+
+    // 日期格式化
+    if (date) {
+      const parts = date.split('-');
+      document.getElementById('dateDisplay').textContent = parts.join('.');
+    }
+
+    // 祝福语
+    document.getElementById('blessingDisplay').innerHTML = '<span class="bracket">「</span>' + blessing + '<span class="bracket">」</span>';
+
+    // 品牌
+    document.getElementById('companyDisplay').textContent = company;
+    document.getElementById('phoneDisplay').textContent = phoneVal;
+  }
+
+  // 上传底图
+  function handleBgUpload(input) {
+    if (input.files && input.files[0]) {
+      const file = input.files[0];
+      document.getElementById('bgFileName').textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('bgImage').src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  // 上传 Logo
+  function handleLogoUpload(input) {
+    if (input.files && input.files[0]) {
+      const file = input.files[0];
+      document.getElementById('logoFileName').textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const logo = document.getElementById('logoImage');
+        logo.src = e.target.result;
+        logo.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  // 下载图片
+  async function downloadImage() {
+    const btn = document.getElementById('btnDownload');
+    btn.classList.add('loading');
+    btn.textContent = '⏳ 生成中...';
+
+    try {
+      const canvas = document.getElementById('canvas');
+      // 临时取消缩放以按原始尺寸渲染
+      const origTransform = canvas.style.transform;
+      canvas.style.transform = 'none';
+
+      const rendered = await html2canvas(canvas, {
+        width: 1080,
+        height: 1080,
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+      });
+
+      // 恢复缩放
+      canvas.style.transform = origTransform;
+
+      // 下载
+      const link = document.createElement('a');
+      const name = document.getElementById('customerName').value || '喜报';
+      link.download = `成交喜报-${name}.png`;
+      link.href = rendered.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      console.error('生成失败:', err);
+      alert('图片生成失败，请检查底图是否已加载');
+    }
+
+    btn.classList.remove('loading');
+    btn.textContent = '📥 下载喜报图片';
+  }
+</script>
+
+</body>
+</html>
